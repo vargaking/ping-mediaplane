@@ -15,6 +15,8 @@ const serverState = {
     transports: new Map(),
     // Map<producerId, producerObject>
     producers: new Map(),
+    // Map<consumerId, consumerObject>
+    consumers: new Map(),
 };
 
 // --- Initialization Functions ---
@@ -173,7 +175,16 @@ app.post('/api/media/consume', async (req, res) => {
             paused: true, // Start paused, let the client resume when ready to display/play
         });
 
-        // NOTE: We should store the consumer state in serverState here, but omit for simplicity.
+        // Store the consumer
+        serverState.consumers.set(consumer.id, consumer);
+
+        // Cleanup when closed
+        consumer.on('transportclose', () => {
+            serverState.consumers.delete(consumer.id);
+        });
+        consumer.on('producerclose', () => {
+            serverState.consumers.delete(consumer.id);
+        });
 
         console.log(`Consumer created: ${consumer.id}`);
 
@@ -190,6 +201,25 @@ app.post('/api/media/consume', async (req, res) => {
     } catch (error) {
         console.error('Error creating consumer:', error);
         res.status(500).json({ error: 'Failed to create consumer', details: error.message });
+    }
+});
+
+// Endpoint 6: Resume Consumer
+app.post('/api/media/resume_consumer', async (req, res) => {
+    const { consumerId } = req.body;
+    const consumer = serverState.consumers.get(consumerId);
+
+    if (!consumer) {
+        return res.status(404).json({ error: 'Consumer not found' });
+    }
+
+    try {
+        await consumer.resume();
+        console.log(`Consumer resumed: ${consumerId}`);
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error resuming consumer:', error);
+        res.status(500).json({ error: 'Failed to resume consumer', details: error.message });
     }
 });
 
